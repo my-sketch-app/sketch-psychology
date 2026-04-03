@@ -19,11 +19,17 @@ st.markdown("上传你的简笔画，AI会分析你的心理状态")
 # 加载模型
 @st.cache_resource
 def load_model():
-    model_path = "best.pt"
-    if os.path.exists(model_path):
-        return YOLO(model_path)
+    import os
+    # 打印当前目录，查看文件
+    st.write(f"当前目录: {os.getcwd()}")
+    st.write(f"文件列表: {os.listdir('.')}")
+    
+    # 检查 best.pt 是否存在
+    if os.path.exists("best.pt"):
+        st.success("✅ 找到模型文件 best.pt")
+        return YOLO("best.pt")
     else:
-        st.error("模型文件不存在")
+        st.error("❌ 找不到模型文件 best.pt")
         return None
 
 # 心理映射
