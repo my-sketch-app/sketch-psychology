@@ -20,17 +20,17 @@ st.markdown("上传你的简笔画，AI会分析你的心理状态")
 @st.cache_resource
 def load_model():
     import os
-    # 打印当前目录，查看文件
-    st.write(f"当前目录: {os.getcwd()}")
-    st.write(f"文件列表: {os.listdir('.')}")
     
-    # 检查 best.pt 是否存在
-    if os.path.exists("best.pt"):
-        st.success("✅ 找到模型文件 best.pt")
-        return YOLO("best.pt")
+    # 检查模型文件大小
+    model_path = "best.pt"
+    if os.path.exists(model_path):
+        file_size = os.path.getsize(model_path)
+        st.write(f"模型文件大小: {file_size / 1024 / 1024:.2f} MB")
     else:
-        st.error("❌ 找不到模型文件 best.pt")
+        st.error("模型文件不存在")
         return None
+    
+    return YOLO(model_path)
 
 # 心理映射
 def map_to_psychology(detections):
