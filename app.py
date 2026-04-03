@@ -89,20 +89,28 @@ if uploaded_file:
             # YOLO检测
             model = load_model()
             if model:
-                results = model(tmp_path, conf=0.3)
-                
-                detections = []
-                for r in results:
-                    for box in r.boxes:
-                        detections.append({
-                            'object': model.names[int(box.cls[0])],
-                            'confidence': float(box.conf[0])
-                        })
-                
-                # 显示检测结果
-                st.success(f"检测到 {len(detections)} 个物体")
-                for d in detections:
-                    st.write(f"• {d['object']}: {d['confidence']:.2f}")
+               # 检测
+results = model(tmp_path, conf=0.1)  # 降低阈值
+
+detections = []
+for r in results:
+    if r.boxes is not None:
+        st.write(f"原始检测: {len(r.boxes)} 个物体")
+        for box in r.boxes:
+            conf = float(box.conf[0])
+            cls = int(box.cls[0])
+            name = model.names[cls]
+            st.write(f"  {name}: {conf:.2f}")
+            
+            if conf > 0.1:  # 显示所有
+                detections.append({
+                    'object': name,
+                    'confidence': conf
+                })
+    else:
+        st.write("原始检测: 0 个物体")
+
+st.write(f"最终检测: {len(detections)} 个物体")
                 
                 # 心理映射
                 mapped = map_to_psychology(detections)
