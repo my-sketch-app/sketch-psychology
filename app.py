@@ -89,7 +89,7 @@ if uploaded_file:
             # YOLO检测
             model = load_model()
             if model:
-               # 检测
+            # 检测
 results = model(tmp_path, conf=0.1)  # 降低阈值
 
 detections = []
