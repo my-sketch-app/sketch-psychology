@@ -17,16 +17,17 @@ st.markdown("上传你的简笔画，AI会分析你的心理状态")
 # 加载模型
 @st.cache_resource
 def load_model():
-    """加载YOLO模型"""
+    import urllib.request
     model_path = "best.pt"
     
-    if os.path.exists(model_path):
-        file_size = os.path.getsize(model_path)
-        st.sidebar.write(f"✅ 模型已加载 ({file_size / 1024 / 1024:.2f} MB)")
-        return YOLO(model_path)
-    else:
-        st.sidebar.error("❌ 模型文件不存在")
-        return None
+    if not os.path.exists(model_path):
+        st.info("正在下载模型...")
+        # 替换成你的网盘直链
+        url = "https://ttttt.link/f/69cf9a42d7f53/best.pt"
+        urllib.request.urlretrieve(url, model_path)
+        st.success("模型下载完成")
+    
+    return YOLO(model_path)
 
 # 物体到心理维度的映射
 def map_to_psychology(detections):
