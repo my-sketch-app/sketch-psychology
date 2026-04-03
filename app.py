@@ -91,7 +91,6 @@ if uploaded_file:
             if model:
             # 检测
 results = model(tmp_path, conf=0.1)  # 降低阈值
-
 detections = []
 for r in results:
     if r.boxes is not None:
