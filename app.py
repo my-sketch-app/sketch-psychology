@@ -1,22 +1,26 @@
 import streamlit as st
-import requests
-import json
-from PIL import Image
-import io
+import tempfile
+import os
+from ultralytics import YOLO
+from openai import OpenAI
 
-st.set_page_config(page_title="简笔画心理分析系统", page_icon="🎨")
+# 页面配置
+st.set_page_config(
+    page_title="简笔画心理分析系统",
+    page_icon="🎨",
+    layout="wide"
+)
+
 st.title("🎨 简笔画心理分析系统")
-st.markdown("上传你的简笔画，系统会分析心理状态")
+st.markdown("上传你的简笔画，AI会分析你的心理状态")
 
-# 侧边栏说明
-with st.sidebar:
-    st.header("📖 使用说明")
-    st.markdown("""
-    1. 上传你的简笔画图片
-    2. 点击「开始分析」按钮
-    3. 系统会识别画中的物体
-    4. 查看心理分析结果
-    """)
+# 加载模型
+@st.cache_resource
+def load_model():
+    if os.path.exists("best.pt"):
+        return YOLO("best.pt")
+    else:
+        return YOLO("yolov8n.pt")
 
 # 物体到心理维度的映射
 def map_to_psychology(detections):
@@ -31,14 +35,72 @@ def map_to_psychology(detections):
     }
     result = []
     for d in detections:
-        obj = d.get('label', '')
+        obj = d['object']
         if obj in mapping:
             result.append({
                 'object': obj,
-                'confidence': d.get('confidence', 0),
+                'confidence': d['confidence'],
                 'dimension': mapping[obj]
             })
     return result
+
+# AI心理分析
+def ai_analysis(detections, scores, api_key):
+    if not api_key:
+        return "请配置 API Key"
+    
+    client = OpenAI(
+        api_key=api_key,
+        base_url="https://api.siliconflow.cn/v1"
+    )
+    
+    prompt = f"""你是一位专业的心理分析师。
+
+用户画了一幅简笔画，检测到以下物体：
+{detections}
+
+心理维度评分：
+{scores}
+
+请给出：
+1. 整体心理状态评估
+2. 各维度详细解读
+3. 给用户的具体建议（3-5条）
+4. 关注等级（正常/需要关注/建议咨询）
+
+请用温暖专业的语气回答。"""
+
+    try:
+        response = client.chat.completions.create(
+            model="deepseek-ai/DeepSeek-V3",
+            messages=[
+                {"role": "system", "content": "你是专业的心理分析师，回答温暖有建设性。"},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            max_tokens=1500
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"AI分析失败: {e}"
+
+# 侧边栏说明
+with st.sidebar:
+    st.header("📖 使用说明")
+    st.markdown("""
+    1. 上传你的简笔画图片
+    2. 点击「开始分析」按钮
+    3. 系统会识别画中的物体
+    4. AI会生成心理分析报告
+    
+    **建议画的元素：**
+    - 人物（自我认知）
+    - 房子（家庭安全感）
+    - 树木（成长动力）
+    - 太阳（积极情绪）
+    """)
+    st.markdown("---")
+    st.caption("基于 YOLOv8 + 硅基流动大模型")
 
 # 主界面
 uploaded_file = st.file_uploader("上传简笔画", type=["jpg", "png", "jpeg"])
@@ -48,66 +110,58 @@ if uploaded_file:
     
     if st.button("开始分析"):
         with st.spinner("分析中，请稍候..."):
-            try:
-                # 读取图片
-                image_bytes = uploaded_file.read()
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp:
+                tmp.write(uploaded_file.read())
+                tmp_path = tmp.name
+            
+            model = load_model()
+            results = model(tmp_path, conf=0.3)
+            
+            detections = []
+            for r in results:
+                if r.boxes is not None:
+                    for box in r.boxes:
+                        conf = float(box.conf[0])
+                        cls = int(box.cls[0])
+                        name = model.names[cls]
+                        detections.append({'object': name, 'confidence': round(conf, 2)})
+            
+            if detections:
+                st.success(f"✅ 检测到 {len(detections)} 个物体")
                 
-                # 使用 Hugging Face 的免费推理 API（物体检测）
-                API_URL = "https://api-inference.huggingface.co/models/facebook/detr-resnet-50"
-                headers = {"Authorization": "Bearer hf_xxxxxxxxxxxxxxxxxxxxx"}  # 需要注册获取 token
-                
-                # 由于需要 token，这里先用模拟数据演示
-                # 实际使用时需要注册 Hugging Face 并获取免费 token
-                
-                # 模拟检测结果（实际使用时替换为 API 调用）
-                detections = [
-                    {'label': 'tree', 'confidence': 0.88},
-                    {'label': 'tree', 'confidence': 0.81},
-                    {'label': 'sun', 'confidence': 0.71}
-                ]
-                
-                # 心理映射
                 mapped = map_to_psychology(detections)
                 
-                if mapped:
-                    st.success(f"✅ 检测到 {len(mapped)} 个物体")
-                    
-                    st.subheader("🔍 检测结果")
-                    for m in mapped:
-                        st.write(f"• **{m['object']}** ({m['confidence']:.2f}) → {m['dimension']}")
-                    
-                    # 计算维度分数
-                    scores = {}
-                    for m in mapped:
-                        dim = m['dimension']
-                        if dim not in scores:
-                            scores[dim] = 0
-                        scores[dim] = max(scores[dim], m['confidence'])
-                    
-                    st.subheader("📊 心理维度评分")
-                    for dim, score in scores.items():
-                        bar = "█" * int(score * 20)
-                        st.write(f"{dim}: {bar} {score:.2f}")
-                    
-                    st.subheader("📋 简要分析")
-                    suggestions = []
-                    if scores.get('自我认知', 0) < 0.4:
-                        suggestions.append("自我表达较少，可以多鼓励表达自己的想法")
-                    if scores.get('成长动力', 0) > 0.7:
-                        suggestions.append("成长动力充足，积极向上")
-                    if scores.get('积极情绪', 0) > 0.7:
-                        suggestions.append("情绪状态积极乐观")
-                    
-                    if suggestions:
-                        for s in suggestions:
-                            st.write(f"• {s}")
-                    else:
-                        st.write("心理状态整体良好")
+                st.subheader("🔍 检测结果")
+                for m in mapped:
+                    st.write(f"• **{m['object']}** ({m['confidence']:.2f}) → {m['dimension']}")
+                
+                # 计算分数
+                scores = {}
+                for m in mapped:
+                    dim = m['dimension']
+                    if dim not in scores:
+                        scores[dim] = 0
+                    scores[dim] = max(scores[dim], m['confidence'])
+                
+                st.subheader("📊 心理维度评分")
+                for dim, score in scores.items():
+                    bar = "█" * int(score * 20)
+                    st.write(f"{dim}: {bar} {score:.2f}")
+                
+                # AI深度分析
+                st.subheader("🤖 AI心理分析报告")
+                api_key = st.secrets.get("SILICONFLOW_API_KEY", "")
+                if api_key:
+                    analysis = ai_analysis(mapped, scores, api_key)
+                    st.markdown(analysis)
                 else:
-                    st.warning("未检测到明显物体")
-                    
-            except Exception as e:
-                st.error(f"分析失败: {e}")
+                    st.info("如需AI深度分析，请配置API Key")
+                    st.write("当前仅显示基础检测结果")
+            else:
+                st.warning("未检测到物体")
+                st.info("建议：画得再清晰一些，尝试画人物、房子、树、太阳等元素")
+            
+            os.unlink(tmp_path)
 
 st.markdown("---")
-st.caption("🎨 简笔画心理分析系统")
+st.caption("🎨 简笔画心理分析系统 | 技术：YOLOv8 + 硅基流动大模型")
