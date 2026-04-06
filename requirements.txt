@@ -1,4 +1,6 @@
-requests
+ultralytics
+opencv-python-headless
 streamlit
 openai
 Pillow
+numpy
